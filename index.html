@@ -248,15 +248,6 @@
   .fade-in { animation: fade .5s cubic-bezier(.2,.8,.2,1) both; }
   @keyframes fade { from { opacity: 0; transform: translateY(8px); } }
 
-  /* ===== Auth ===== */
-  #auth { position: fixed; inset: 0; z-index: 90; display: none; place-items: center; padding: 16px; background: rgba(3,4,10,.94); backdrop-filter: blur(6px); }
-  #auth.show { display: grid; }
-  .auth-box { width: min(420px, 100%); }
-  .auth-msg { font-size: 13px; min-height: 18px; color: var(--muted); }
-  .auth-msg.err { color: var(--red); } .auth-msg.ok { color: var(--cyan); }
-  .auth-switch { font-size: 13px; color: var(--muted); text-align: center; }
-  .auth-switch a { color: var(--cyan); }
-  .user { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
   .btn:disabled { opacity: .5; cursor: wait; }
 
   @media (max-width: 900px) {
@@ -265,7 +256,7 @@
   }
   @media (max-width: 560px) {
     .wrap { padding: 0 16px 60px; }
-    .status, #userEmail { display: none; }
+    .status { display: none; }
     .panel { padding: 20px; }
     .stats { grid-template-columns: 1fr 1fr; }
     .stats .stat:last-child { grid-column: 1 / -1; }
@@ -289,9 +280,7 @@
       </div>
     </div>
     <div class="hdr-right">
-      <div class="status" title="데이터는 Supabase 클라우드에 저장됩니다"><span class="dot" id="syncDot"></span><span><span id="syncState">CLOUD</span> · <span id="clock">--:--:--</span></span></div>
-      <div class="user"><span id="userEmail"></span><button class="ghost" id="logoutBtn">로그아웃</button></div>
-      <div class="month-nav">
+      <div class="status" title="데이터는 Supabase 클라우드에 저장됩니다"><span class="dot" id="syncDot"></span><span><span id="syncState">CLOUD</span> · <span id="clock">--:--:--</span></span></div>      <div class="month-nav">
         <button id="prev" aria-label="이전 달">‹</button>
         <span id="monthLabel"></span>
         <button id="next" aria-label="다음 달">›</button>
@@ -393,20 +382,6 @@
   </form>
 </dialog>
 
-<div id="auth">
-  <div class="auth-box panel">
-    <div class="brand" style="margin-bottom:24px"><div class="logo">₩</div><div><h1>나의 가계부</h1><div class="sub">PERSONAL FINANCE TERMINAL</div></div></div>
-    <div class="panel-head" style="margin-bottom:16px"><h2 id="authTitle">로그인</h2><span class="tag">ACCESS</span></div>
-    <form id="authForm" class="entry">
-      <div class="field"><label for="authEmail">이메일</label><input type="email" id="authEmail" required autocomplete="email"></div>
-      <div class="field"><label for="authPw">비밀번호</label><input type="password" id="authPw" required minlength="6" placeholder="6자 이상"></div>
-      <button class="btn" id="authSubmit" type="submit">로그인</button>
-      <div class="auth-msg" id="authMsg"></div>
-      <div class="auth-switch" id="authSwitch"></div>
-    </form>
-  </div>
-</div>
-
 <div id="toasts"></div>
 
 <script>
@@ -430,8 +405,8 @@ const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&l
 
 /* ================= Supabase ================= */
 const SUPABASE_URL = 'https://gfcylhusujdvzsoinwoj.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_KoeaGtIELKu9b4FarAe72g_qk4SrE3L';  // 공개용 키: RLS 때문에 로그인한 본인 데이터만 접근 가능
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_KEY = 'sb_publishable_KoeaGtIELKu9b4FarAe72g_qk4SrE3L';  // 공개용 키 (로그인 없이 공용 가계부)
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
 const COLS = 'id,type,date,category,amount,memo,created_at';
 
 // 예전(localStorage) 버전 데이터를 계정으로 옮길 때만 사용
@@ -439,7 +414,6 @@ function loadJSON(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 }
 
-let user = null;
 let items = [];
 let budgets = { total: 0, cats: {} };
 let current = new Date(); current.setDate(1);
@@ -472,7 +446,7 @@ async function loadData() {
 }
 
 async function saveBudgets(next) {
-  const { error } = await sb.from('budgets').upsert({ user_id: user.id, total: next.total || 0, cats: next.cats || {}, updated_at: new Date().toISOString() });
+  const { error } = await sb.from('budgets').upsert({ id: 1, total: next.total || 0, cats: next.cats || {}, updated_at: new Date().toISOString() });
   if (error) { toast('예산 저장 실패: ' + error.message, 'danger'); return false; }
   budgets = { total: next.total || 0, cats: next.cats || {} };
   return true;
@@ -482,14 +456,14 @@ async function saveBudgets(next) {
 async function offerLocalMigration() {
   const local = loadJSON(STORAGE_KEY, []);
   if (!Array.isArray(local) || !local.length || items.length) return;
-  if (!confirm(`이 브라우저에 예전 기록 ${local.length}건이 있어요. 내 계정으로 옮길까요?`)) return;
+  if (!confirm(`이 브라우저에 예전 기록 ${local.length}건이 있어요. 클라우드로 옮길까요?`)) return;
   const { data, error } = await sb.from('transactions').insert(local.map(toRow)).select(COLS);
   if (error) { toast('옮기기 실패: ' + error.message, 'danger'); return; }
   items = data.map(fromRow);
   const lb = loadJSON(BUDGET_KEY, null);
   if (lb && !budgets.total && !Object.keys(budgets.cats).length) await saveBudgets(lb);
   try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(BUDGET_KEY); } catch {}
-  toast(`${data.length}건을 계정으로 옮겼어요.`);
+  toast(`${data.length}건을 클라우드로 옮겼어요.`);
   render();
 }
 const getType = () => document.querySelector('input[name=type]:checked').value;
@@ -822,7 +796,7 @@ $('importFile').onchange = e => {
       const newItems = Array.isArray(data) ? data : data.items;   // 이전 버전 백업도 지원
       if (!Array.isArray(newItems)) throw new Error('올바른 백업 파일이 아닙니다.');
       if (confirm(`${newItems.length}건을 불러옵니다. 기존 데이터는 덮어씁니다. 계속할까요?`)) {
-        const del = await sb.from('transactions').delete().eq('user_id', user.id);
+        const del = await sb.from('transactions').delete().not('id', 'is', null);
         if (del.error) throw del.error;
         items = [];
         if (newItems.length) {
@@ -840,81 +814,12 @@ $('importFile').onchange = e => {
 };
 $('clearBtn').onclick = async () => {
   if (!confirm('모든 내역과 예산을 삭제할까요? 되돌릴 수 없습니다.')) return;
-  const r1 = await sb.from('transactions').delete().eq('user_id', user.id);
-  const r2 = await sb.from('budgets').delete().eq('user_id', user.id);
+  const r1 = await sb.from('transactions').delete().not('id', 'is', null);
+  const r2 = await sb.from('budgets').delete().eq('id', 1);
   if (r1.error || r2.error) { toast('초기화 실패: ' + (r1.error || r2.error).message, 'danger'); return; }
   items = []; budgets = { total: 0, cats: {} };
   render();
 };
-
-/* ================= 로그인 ================= */
-let authMode = 'login', authReady = false;
-
-function setAuthMode(mode) {
-  authMode = mode;
-  const login = mode === 'login';
-  $('authTitle').textContent = login ? '로그인' : '회원가입';
-  $('authSubmit').textContent = login ? '로그인' : '가입하기';
-  $('authPw').autocomplete = login ? 'current-password' : 'new-password';
-  $('authSwitch').innerHTML = login
-    ? '계정이 없나요? <a href="#" data-mode="signup">회원가입</a>'
-    : '이미 계정이 있나요? <a href="#" data-mode="login">로그인</a>';
-  $('authMsg').textContent = '';
-}
-$('authSwitch').addEventListener('click', e => {
-  const a = e.target.closest('a');
-  if (!a) return;
-  e.preventDefault(); setAuthMode(a.dataset.mode);
-});
-
-function authError(err) {
-  const m = err.message || '';
-  if (/invalid login credentials/i.test(m)) return '이메일 또는 비밀번호가 맞지 않아요.';
-  if (/email not confirmed/i.test(m)) return '메일 인증이 아직 안 됐어요. 받은 메일의 링크를 눌러 주세요.';
-  if (/already registered/i.test(m)) return '이미 가입된 이메일이에요. 로그인해 주세요.';
-  if (/at least 6/i.test(m)) return '비밀번호는 6자 이상이어야 해요.';
-  if (/rate limit/i.test(m)) return '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.';
-  return m;
-}
-
-$('authForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const email = $('authEmail').value.trim(), password = $('authPw').value;
-  const msg = $('authMsg');
-  msg.className = 'auth-msg'; msg.textContent = '처리 중…';
-  $('authSubmit').disabled = true;
-  const { data, error } = authMode === 'login'
-    ? await sb.auth.signInWithPassword({ email, password })
-    : await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
-  $('authSubmit').disabled = false;
-  if (error) { msg.className = 'auth-msg err'; msg.textContent = authError(error); return; }
-  if (authMode === 'signup' && !data.session) {
-    msg.className = 'auth-msg ok';
-    msg.textContent = '가입 확인 메일을 보냈어요. 메일의 링크를 누르면 바로 로그인돼요.';
-    return;
-  }
-  msg.textContent = '';
-});
-
-$('logoutBtn').onclick = () => sb.auth.signOut();
-
-function onSession(session) {
-  const next = session?.user || null;
-  if (authReady && next?.id === user?.id) return;
-  authReady = true;
-  user = next;
-  if (user) {
-    $('userEmail').textContent = user.email;
-    $('auth').classList.remove('show');
-    loadData();
-  } else {
-    items = []; budgets = { total: 0, cats: {} };
-    $('userEmail').textContent = '';
-    $('authPw').value = '';
-    $('auth').classList.add('show');
-    render();
-  }
-}
 
 // 시계
 const tick = () => { const d = new Date(); $('clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
@@ -923,9 +828,7 @@ tick(); setInterval(tick, 1000);
 $('date').value = ymd(new Date());
 fillCategories();
 render();
-setAuthMode('login');
-// supabase 호출은 콜백 밖에서 해야 해서 setTimeout으로 넘김
-sb.auth.onAuthStateChange((_event, session) => setTimeout(() => onSession(session), 0));
+loadData();
 </script>
 </body>
 </html>
