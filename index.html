@@ -87,6 +87,17 @@
   .label { font-size: 13px; color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 8px; }
   .label .tag { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--dim); }
   .hero { margin-bottom: 36px; }
+  .slogan {
+    display: inline-block; margin-bottom: 26px; padding: 10px 22px;
+    font-size: clamp(20px, 4vw, 30px); font-weight: 900; letter-spacing: .02em;
+    background: linear-gradient(90deg, var(--cyan), var(--magenta));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    border: 1px solid var(--line-strong); position: relative;
+    filter: drop-shadow(0 0 10px rgba(0,240,255,.45));
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+    animation: sloganGlow 2.4s ease-in-out infinite;
+  }
+  @keyframes sloganGlow { 50% { filter: drop-shadow(0 0 18px rgba(255,43,214,.6)); } }
   .hero .balance {
     font-family: var(--display); font-weight: 900; line-height: 1; letter-spacing: -.01em;
     font-size: clamp(44px, 8.5vw, 96px); margin: 14px 0 28px;
@@ -105,6 +116,7 @@
 
   /* ===== Panels ===== */
   .grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px; margin-bottom: 20px; }
+  .grid > *, .row > *, .fc-metrics > * { min-width: 0; }
   .panel {
     position: relative; padding: 26px; isolation: isolate;
     background: linear-gradient(135deg, rgba(0,240,255,.55), rgba(0,240,255,.1) 28%, rgba(255,43,214,.1) 72%, rgba(255,43,214,.5));
@@ -159,6 +171,7 @@
   .fc-metrics .m span { font-size: 12px; color: var(--muted); }
   .fc-metrics .m strong { display: block; font-family: var(--display); font-weight: 700; font-size: 18px; margin-top: 6px; white-space: nowrap; }
   .fc-metrics .m:first-child strong { font-size: 22px; color: var(--magenta); text-shadow: 0 0 14px rgba(255,43,214,.5); }
+  .fc-chart { overflow: hidden; padding: 6px 0; }
   .fc-chart svg { width: 100%; height: auto; display: block; overflow: visible; }
   .fc-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
   .fc-legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; }
@@ -259,6 +272,12 @@
     .status { display: none; }
     .panel { padding: 20px; }
     .stats { grid-template-columns: 1fr 1fr; }
+    .stat { min-width: 0; padding: 14px 12px; }
+    .row { grid-template-columns: 1fr; }
+    .stat strong { font-size: 14px; }
+    .fc-metrics .m strong { font-size: 15px; white-space: normal; word-break: keep-all; }
+    .fc-metrics .m:first-child strong { font-size: 19px; }
+    .wrap { overflow-x: hidden; }
     .stats .stat:last-child { grid-column: 1 / -1; }
     .fc-metrics { grid-template-columns: 1fr 1fr; }
     .fc-metrics .m:first-child { grid-column: 1 / -1; }
@@ -289,6 +308,7 @@
   </header>
 
   <section class="hero fade-in">
+    <div class="slogan">바이브코딩 화이팅!</div>
     <div class="label">이번 달 잔액 <span class="tag">NET BALANCE</span></div>
     <div class="balance" id="sumBalance">0<span class="unit">원</span></div>
     <div class="stats">
@@ -693,7 +713,7 @@ function renderForecast(expItems, exp, inc) {
   let line = `M${x(0)},${y(0)}`;
   for (let d = 1; d <= cutoff; d++) line += ` L${x(d)},${y(cum[d - 1])}`;
   const area = `${line} L${x(cutoff)},${y(0)} Z`;
-  const ticks = [1, 10, 20, days].map(d => `<text x="${x(d)}" y="${H - 6}" text-anchor="middle">${d}일</text>`).join('');
+  const ticks = [1, 10, 20, days].map(d => `<text x="${x(d)}" y="${H - 6}" text-anchor="${d === days ? 'end' : 'middle'}">${d}일</text>`).join('');
   const gridLines = [0.25, 0.5, 0.75, 1].map(f => `<line x1="${L}" x2="${W - R}" y1="${y(maxY * f / 1.12)}" y2="${y(maxY * f / 1.12)}" stroke="rgba(0,240,255,.07)"/>`).join('');
 
   $('forecast').innerHTML = `
