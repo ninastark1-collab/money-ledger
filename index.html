@@ -75,6 +75,17 @@
   .status { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .1em; display: flex; align-items: center; gap: 8px; }
   .status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: blink 1.6s infinite; }
   @keyframes blink { 50% { opacity: .25; } }
+  .bgm-btn {
+    display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; cursor: pointer;
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em; transition: .2s;
+  }
+  .bgm-btn:hover { border-color: var(--line-strong); color: var(--text); }
+  .bgm-btn.on { color: var(--magenta); border-color: var(--magenta); box-shadow: 0 0 14px rgba(255,43,214,.35), inset 0 0 10px rgba(255,43,214,.15); }
+  .bgm-btn #bgmLabel { line-height: 1; }
+  .bgm-btn .bgm-note { display: block; flex-shrink: 0; }
+  .bgm-btn.on .bgm-note { animation: noteBounce .6s ease-in-out infinite alternate; filter: drop-shadow(0 0 4px currentColor); }
+  @keyframes noteBounce { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
   .month-nav { display: flex; align-items: center; gap: 6px; }
   .month-nav button {
     background: transparent; border: 1px solid var(--line); color: var(--cyan);
@@ -299,7 +310,10 @@
       </div>
     </div>
     <div class="hdr-right">
-      <div class="status" title="데이터는 Supabase 클라우드에 저장됩니다"><span class="dot" id="syncDot"></span><span><span id="syncState">CLOUD</span> · <span id="clock">--:--:--</span></span></div>      <div class="month-nav">
+      <div class="status" title="데이터는 Supabase 클라우드에 저장됩니다"><span class="dot" id="syncDot"></span><span><span id="syncState">CLOUD</span> · <span id="clock">--:--:--</span></span></div>      <button class="bgm-btn" id="bgmBtn" title="배경음악 켜기/끄기" aria-label="배경음악 켜기/끄기">
+        <svg class="bgm-note" viewBox="0 0 12 16" width="12" height="16" aria-hidden="true"><g fill="currentColor"><ellipse cx="4.6" cy="13" rx="3.4" ry="2.4" transform="rotate(-22 4.6 13)"/><rect x="6.9" y="1" width="1.4" height="12"/><path d="M8.3 1c0 2.2 3.7 2.9 3.7 5.8-.7-1.7-2-2.5-3.7-2.8z"/><path d="M8.3 4.6c0 2.2 3.7 2.9 3.7 5.8-.7-1.7-2-2.5-3.7-2.8z"/></g></svg><span id="bgmLabel">BGM</span>
+      </button>
+      <div class="month-nav">
         <button id="prev" aria-label="이전 달">‹</button>
         <span id="monthLabel"></span>
         <button id="next" aria-label="다음 달">›</button>
@@ -840,6 +854,113 @@ $('clearBtn').onclick = async () => {
   items = []; budgets = { total: 0, cats: {} };
   render();
 };
+
+/* ================= 배경음악 (Web Audio로 실시간 연주하는 오리지널 신스웨이브) ================= */
+const BGM = (() => {
+  const BPM = 100, STEP = 60 / BPM / 4;                       // 16분음표 길이(초)
+  const CHORDS = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];  // Am - F - C - G
+  const BASS = [45, 41, 48, 43];
+  const LEAD = [76, null, 72, null, 74, 76, null, 79, 77, null, 76, null, 72, null, 74, null];
+  const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+  let ctx, master, arpBus, noise, timer, step = 0, nextTime = 0, playing = false;
+
+  function init() {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value = 0;
+    const comp = ctx.createDynamicsCompressor();
+    master.connect(comp); comp.connect(ctx.destination);
+    // 아르페지오용 에코
+    arpBus = ctx.createGain();
+    const delay = ctx.createDelay(); delay.delayTime.value = STEP * 3;
+    const fb = ctx.createGain(); fb.gain.value = 0.35;
+    arpBus.connect(master); arpBus.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(master);
+    // 하이햇용 화이트 노이즈
+    noise = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+    const d = noise.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  function tone(type, freq, t, dur, vol, dest, cutoff, attack = 0.005) {
+    const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+    o.type = type; o.frequency.value = freq;
+    f.type = 'lowpass'; f.frequency.value = cutoff;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f); f.connect(g); g.connect(dest);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  function kick(t) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+    g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.32);
+  }
+  function hat(t, vol) {
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noise; f.type = 'highpass'; f.frequency.value = 7000;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + 0.06);
+  }
+
+  function play(s, t) {
+    const bar = Math.floor(s / 16) % 4, i = s % 16, ch = CHORDS[bar];
+    if (i % 4 === 0) kick(t);
+    hat(t, i % 4 === 2 ? 0.12 : 0.035);
+    if (i % 2 === 0) tone('sawtooth', hz(BASS[bar] + (i % 4 === 2 ? 12 : 0)), t, STEP * 1.8, 0.13, master, 500);
+    tone('square', hz(ch[i % 3] + 12 + (i % 6 >= 3 ? 12 : 0)), t, STEP * 0.9, 0.03, arpBus, 2600);
+    if (i === 0) ch.forEach(m => tone('sawtooth', hz(m), t, STEP * 16, 0.025, master, 1400, 0.6));
+    // 8마디 중 뒤 4마디에만 멜로디
+    const lead = LEAD[i];
+    if (Math.floor(s / 64) % 2 === 1 && lead) tone('triangle', hz(lead), t, STEP * 3, 0.07, arpBus, 3000, 0.02);
+  }
+  function schedule() {
+    while (nextTime < ctx.currentTime + 0.15) {
+      play(step, nextTime);
+      nextTime += STEP; step = (step + 1) % 128;
+    }
+  }
+
+  return {
+    get playing() { return playing; },
+    async start() {
+      if (playing) return;
+      if (!ctx) init();
+      await ctx.resume();
+      playing = true;
+      nextTime = ctx.currentTime + 0.05;
+      clearInterval(timer); timer = setInterval(schedule, 25);
+      master.gain.cancelScheduledValues(ctx.currentTime);
+      master.gain.setTargetAtTime(0.4, ctx.currentTime, 0.4);
+    },
+    stop() {
+      if (!playing) return;
+      playing = false;
+      master.gain.cancelScheduledValues(ctx.currentTime);
+      master.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
+      setTimeout(() => { if (!playing) { clearInterval(timer); ctx.suspend(); } }, 600);
+    }
+  };
+})();
+
+// 배경음악은 항상 꺼진 상태로 시작 (버튼을 눌러야 재생)
+let bgmWanted = false;
+
+function updateBgmBtn() {
+  $('bgmBtn').classList.toggle('on', BGM.playing);
+  $('bgmBtn').title = BGM.playing ? '배경음악 끄기' : '배경음악 켜기';
+}
+$('bgmBtn').onclick = async () => {
+  if (BGM.playing) BGM.stop(); else await BGM.start();
+  bgmWanted = BGM.playing;
+  updateBgmBtn();
+};
+// 다른 탭으로 가면 잠시 멈추고, 돌아오면 다시 재생
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) { if (BGM.playing) BGM.stop(); }
+  else if (bgmWanted && !BGM.playing) { await BGM.start(); }
+  updateBgmBtn();
+});
 
 // 시계
 const tick = () => { const d = new Date(); $('clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
