@@ -1,7 +1,9 @@
 # 나의 가계부 (money-ledger)
 
-DB도, 회원가입도 필요 없는 **파일 하나짜리 가계부 웹페이지**입니다.
-`index.html`을 브라우저로 열기만 하면 바로 쓸 수 있습니다.
+**Supabase**에 데이터를 저장하는 **파일 하나짜리 가계부 웹페이지**입니다.
+이메일로 가입하면 휴대폰과 PC 어디서든 같은 가계부를 볼 수 있습니다.
+
+👉 바로 쓰기: https://ninastark1-collab.github.io/money-ledger/
 
 ![가계부 화면](가계부_전체캡처.png)
 
@@ -19,14 +21,22 @@ DB도, 회원가입도 필요 없는 **파일 하나짜리 가계부 웹페이�
 
 ## 사용 방법
 
-1. `index.html`을 내려받습니다.
-2. 브라우저(Chrome, Edge 등)로 엽니다.
+1. 위 주소로 접속합니다.
+2. 이메일과 비밀번호로 회원가입합니다.
+3. 받은 확인 메일의 링크를 누르면 로그인됩니다.
 
 ## 데이터 저장
 
-- 모든 데이터는 **브라우저의 localStorage**에만 저장되고, 서버로는 전송되지 않습니다.
-- 다른 브라우저나 기기로 옮길 때는 **백업 내보내기 → 백업 불러오기**를 사용하세요.
+- 거래 내역과 예산은 **Supabase(PostgreSQL)**에 저장됩니다.
+  - `transactions` 테이블: 거래 내역
+  - `budgets` 테이블: 사용자별 월 예산
+- **RLS(행 단위 보안)**가 켜져 있어서, 로그인한 사용자는 자기 데이터만 보고 수정할 수 있습니다.
+- 코드에 들어 있는 Supabase 키는 공개해도 되는 publishable 키입니다.
+- 예전 버전에서 브라우저에 저장해 둔 기록이 있으면, 처음 로그인할 때 계정으로 옮길지 물어봅니다.
+- **백업 내보내기 / 불러오기**(JSON)도 그대로 쓸 수 있습니다.
 
 ## 기술
 
-HTML, CSS, 순수 JavaScript로 만들었습니다(외부 라이브러리 없음). 글꼴은 Pretendard, Orbitron, JetBrains Mono를 씁니다.
+- 화면: HTML, CSS, 순수 JavaScript
+- 데이터와 로그인: [supabase-js](https://github.com/supabase/supabase-js)
+- 글꼴: Pretendard, Orbitron, JetBrains Mono
